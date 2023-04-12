@@ -29,7 +29,8 @@ INCLUDE_DIR  = include
 LOGS_DIR     = logs
 DFLT_DIR     = default
 
-SRCS     =  main.cpp		Server.cpp \
+SRCS     =  main.cpp		Server.cpp		Client.cpp \
+            utils.cpp
 
 OBJS = $(addprefix $(OBJS_DIR)/, $(SRCS:.cpp=.o))
 DEPS = $(addprefix $(DEPS_DIR)/, $(SRCS:.cpp=.d))

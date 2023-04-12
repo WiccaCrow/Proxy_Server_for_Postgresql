@@ -1,0 +1,13 @@
+# gcc
+.obj
+.deps
+
+# tmp
+.tmp
+
+# VSCode
+.vscode
+
+# other
+.DS_Store
+subj.md
