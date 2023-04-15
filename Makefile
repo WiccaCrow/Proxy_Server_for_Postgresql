@@ -8,9 +8,9 @@ NAME = TCPserv
 
 # CXX       =   g++
 # CPPLIB	=
-CXX       =   gcc
-CPPFLAGS  =   -Wall -Wextra -Werror
-CPPLIB    =   -lstdc++
+CXX        =   gcc
+CPPFLAGS   =   -Wall -Wextra -Werror -std=c++17
+CPPLIB     =   -lstdc++
 COMP_CONST =  -D LOGS_DIR=\"${LOGS_DIR}\"
 
 ifeq ($(DEBUG), 1)
@@ -29,8 +29,9 @@ INCLUDE_DIR  = include
 LOGS_DIR     = logs
 DFLT_DIR     = default
 
-SRCS     =  main.cpp		Server.cpp		Client.cpp \
-            utils.cpp
+SRCS         =  main.cpp		Server.cpp		Client.cpp   \
+                utils.cpp		Request.cpp		Response.cpp \
+
 
 OBJS = $(addprefix $(OBJS_DIR)/, $(SRCS:.cpp=.o))
 DEPS = $(addprefix $(DEPS_DIR)/, $(SRCS:.cpp=.d))
