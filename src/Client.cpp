@@ -2,11 +2,11 @@
 
 #include "Server.hpp"
 
-Client::Client(int fd_cli, int fd_db, int i_events) : 
-                _i_events(i_events),
-                _fd_cli(fd_cli),
-                _fd_db(fd_db),
-                _id(-1) {
+Client::Client(int fd_cli, int fd_db, int i_events) 
+                : _i_events(i_events)
+                , _fd_cli(fd_cli)
+                , _fd_db(fd_db)
+                , _id(-1) {
     
 
 }
@@ -61,34 +61,29 @@ Client::get_i_events(void) {
 
 void Client::tryReceiveRequest(int fd) {
 
-    if (_requests.size() == _responses.size()) {
-        addRequest();
-    }
-
-    if (_requests.size() > _responses.size()) {
-        receive(_requests.back());
-    }
-
-    (void)fd;
-    // if (_requests.back()->formed()) {
-    //     addResponse();
-    // }
+    std::list<Request *> *req;
+    if (fd == _fd_cli)
+        req = &_requests_cli;
+    else
+        req = &_requests_db;
+    
+    addRequest(req);
+    receive(req->back(), fd);
 }
 
-void Client::addRequest(void) {
-
-    Request *req = new Request();
-
+void 
+Client::addRequest(std::list<Request *> *reqlst) {
+    Request *req = new Request(this);
     if (req == NULL) {
         ::std::cerr << "Cannot allocate memory for Request" << ::std::endl;
         return ;
     }
-    _requests.push_back(req);
+    reqlst->push_back(req);
 }
 
-void Client::receive(Request *req) {
+void Client::receive(Request *req, int fd) {
 
-    int bytes = read();
+    int bytes = read(fd);
 
     if (bytes < 0) {
         return ;
@@ -101,21 +96,48 @@ void Client::receive(Request *req) {
 
     while (!req->formed()) {
         std::string line;
-std::cout << "test try recieve request" << std::endl;
-        // if (!getClientIO()->getline(line, req->getExpBodySize() - req->getRealBodySize())) {
-        //     return ;
-        // }
+        if (!getline(line, req->getExpBodySize() - req->getRealBodySize(), fd)) {
+            return ;
+        }
 
-        // req->parseLine(line);
+        req->parseLine(line);
     }
+    std::cout << "recieved request: is formed" << std::endl;
+
+}
+
+int
+Client::getline(std::string &line, int64_t size, int fd) {
+    std::size_t pos = 0;
+    std::string *rem = (fd == _fd_cli ? &_rem_cli : &_rem_db);
+    if (size < 0) {
+        pos = rem->find(LF);
+        // если нет LF, читать дальше из fd
+        if (pos == std::string::npos) {
+            return 0;
+        }
+        pos += 1;
+
+    } else {
+        if (rem->length() == 0 && size != 0) {
+            return 0;
+        }
+        pos = size;
+        if (pos > rem->length()) {
+            pos = rem->length();
+        }
+    }
+    line = rem->substr(0, pos);
+    rem->erase(0, pos);
+    return 1;
 }
 
 int 
-Client::read(void) {
+Client::read(int fd) {
 
     char buf[BUFFER_SIZE + 1] = { 0 };
 
-    int bytes = ::read(_fd_cli, buf, BUFFER_SIZE);
+    int bytes = ::read(fd, buf, BUFFER_SIZE);
  
     if (bytes > 0) {
         buf[bytes] = '\0';
@@ -123,8 +145,9 @@ Client::read(void) {
         if (!strcmp(buf, "\xff\xf4\xff\xfd\x06") || !strcmp(buf, "\xff\xed\xff\xfd\x06")) {
             return 0;
         }
-        
-        _rem.append(buf, bytes);
+
+        std::string *rem = (fd == _fd_cli ? &_rem_cli : &_rem_db);
+        rem->append(buf, bytes);
         return bytes;
     } 
 

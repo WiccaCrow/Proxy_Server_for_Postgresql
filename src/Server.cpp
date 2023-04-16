@@ -1,7 +1,7 @@
 #include "Server.hpp"
 
-Server::Server(void) :  _fd_listen(-1),
-                        _fd_epoll(-1) {
+Server::Server(void) :  _fd_listen(-1)
+                     ,   _fd_epoll(-1) {
     _event.data.fd = -1;
 
     _event.data.fd = listenSockfd();
@@ -151,8 +151,8 @@ Server::epollin(int i) {
         // ::std::cout << "Server::pollin:: new test" << ::std::endl;
         add_new_client(i);
     } else {
-        // найти клиента
         // ::std::cout << "Server::pollin:: read test" << ::std::endl;
+        // выбрать клиента
         size_t id = _connector[fd];
 
         if (id >= _clients.size()) {
@@ -166,20 +166,18 @@ Server::epollin(int i) {
             return ;
         }
 
-        // получение данных от клиента
+        // получить данные от клиента
         if (fd == client->get_fd_cli()) {
             client->tryReceiveRequest(client->get_fd_cli());
         } else {
             client->tryReceiveRequest(client->get_fd_db());
         }
 
-
         // вызвать чтение - простой тест
         // char buf[20000] = {0};
         // read(fd, buf, 2000);
         // ::std::cout << buf << std::endl;
     }
-         
 }
 
 void
@@ -303,7 +301,7 @@ isClientFree(::Client *client) {
 
 void
 Server::rmClient(::Client *client) {
-
+std::cout << "rmClient" << std::endl; // test внимание
     _clients[client->get_id()] = NULL;
     delete client;
 

@@ -11,7 +11,7 @@ NAME = TCPserv
 CXX        =   gcc
 CPPFLAGS   =   -Wall -Wextra -Werror -std=c++17
 CPPLIB     =   -lstdc++
-COMP_CONST =  -D LOGS_DIR=\"${LOGS_DIR}\"
+COMP_CONST =   -D LOGS_DIR=\"${LOGS_DIR}\"
 
 ifeq ($(DEBUG), 1)
 	CPPFLAGS += -g3

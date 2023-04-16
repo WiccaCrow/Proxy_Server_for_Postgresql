@@ -1,11 +1,18 @@
 #pragma once
 
-class Response
-{
+#include "Request.hpp"
+
+class Client;
+
+class Response {
 private:
-    /* data */
+    Request    *_req;
+    Client     * _client;
+
 public:
-    Response(/* args */);
+    Response(Request *req);
     ~Response();
+
+    void    setClient(Client *client);
 };
 

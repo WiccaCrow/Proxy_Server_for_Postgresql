@@ -29,6 +29,7 @@ class Client {
     int     get_i_events(void);
 
     void    tryReceiveRequest(int fd);
+    int     getline(std::string &line, int64_t size, int fd);
 
 
     private:
@@ -37,13 +38,17 @@ class Client {
     int     _fd_db;
     int     _id;
 
-    std::string _rem;
+    std::string _rem_cli;
+    std::string _rem_db;
 
-    std::list<Request *>  _requests;
-    std::list<Response *> _responses;
+    std::list<Request *>  _requests_cli;
+    std::list<Request *>  _requests_db;
 
-    void    addRequest(void);
-    void    receive(Request *req);
-    int     read(void);
+    // std::list<Response *> _responses;
+
+    void    addRequest(std::list<Request *> *reqlst);
+    void    receive(Request *req, int fd);
+    int     read(int fd);
+    void    addResponse(void);
 
 };

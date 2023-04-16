@@ -5,14 +5,11 @@ Server g_server;
 int main(int ac, char **av) {
 
     std::cout << "Hello" << std::endl;
-
     if (check_ac_av(ac, av))
         return 1;
-
+    
     g_server.start();
 
-    // std::cout << "Hello" << std::endl;
-    
     return 0;
 }
 
@@ -25,9 +22,13 @@ int    check_ac_av(int ac, char **av) {
     
     if ( (av[1][0] != 'h' && av[1][0] != 'p') ||
          (ac > 2  && (!(av[1][0] == 'h' && av[2][0] == 'p') && 
-                      !(av[2][0] == 'h' && av[1][0] == 'p')))) {
-        std::cerr << "Error: wrong arguments.  " << std::endl
-                  << "Example: ./TCPserv h127.0.0.1 p5432" << std::endl
+                      !(av[2][0] == 'h' && av[1][0] == 'p'))) ||
+         (ac > 3)) {
+        if (ac > 3)
+            std::cerr << "Error: too much arguments.  " << std::endl;
+        else
+            std::cerr << "Error: wrong arguments.  " << std::endl;
+        std::cerr << "Example: ./TCPserv h127.0.0.1 p5432" << std::endl
                   << "         ./TCPserv h127.0.0.1 " << std::endl
                   << "         ./TCPserv p5432" << std::endl
                   << "         ./TCPserv " << std::endl
@@ -35,12 +36,19 @@ int    check_ac_av(int ac, char **av) {
         return 1;
     }
 
+    int check_av2;
     if (check_host_or_port(av[1]))
         return 1;
     if (ac > 2)
-        return check_host_or_port(av[2]);
+        check_av2 = check_host_or_port(av[2]);
 
-    return 0;
+    if (!check_av2) {
+        std::cout << "Settings: " << std::endl
+                  << "    host: " << g_db_host << std::endl
+                  << "    port: " << g_db_port << std::endl;
+    }
+
+    return check_av2;
 }
 
 int    check_host_or_port(char* h_or_p) {
@@ -52,12 +60,14 @@ int    check_host_or_port(char* h_or_p) {
 
 int check_port(std::string port) {
     if (!port.empty() 
+        && port.length() < 6
         && (port.find_first_not_of("0123456789") == port.npos) 
         && std::stoi(port) < 65536) {
             g_db_port = port;
             return 0;
         }
-    std::cerr << "Error: incorrect port format" << std::endl;
+    std::cerr << "Error: incorrect port format " << std::endl
+              << "p[port], where port is a number less than 65536." << std::endl;
     return 1;
 }
 
