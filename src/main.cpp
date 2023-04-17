@@ -9,6 +9,7 @@ int main(int ac, char **av) {
         return 1;
     
     g_server.start();
+    std::cout << "Bye" << std::endl;
 
     return 0;
 }
@@ -36,18 +37,18 @@ int    check_ac_av(int ac, char **av) {
         return 1;
     }
 
-    int check_av2;
     if (check_host_or_port(av[1]))
         return 1;
-    if (ac > 2)
+
+    int check_av2 = 0;
+    if (ac > 2) {
         check_av2 = check_host_or_port(av[2]);
-
-    if (!check_av2) {
-        std::cout << "Settings: " << std::endl
-                  << "    host: " << g_db_host << std::endl
-                  << "    port: " << g_db_port << std::endl;
+        if (!check_av2) {
+            std::cout << "Settings: " << std::endl
+                    << "    host: " << g_db_host << std::endl
+                    << "    port: " << g_db_port << std::endl;
+        }
     }
-
     return check_av2;
 }
 

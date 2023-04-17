@@ -14,7 +14,8 @@ CPPLIB     =   -lstdc++
 COMP_CONST =   -D LOGS_DIR=\"${LOGS_DIR}\"
 
 ifeq ($(DEBUG), 1)
-	CPPFLAGS += -g3
+	CPPFLAGS += -g
+	# CPPFLAGS += -g3
 endif
 
 ###################################################################################

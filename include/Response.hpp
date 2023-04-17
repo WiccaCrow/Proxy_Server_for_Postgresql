@@ -6,13 +6,27 @@ class Client;
 
 class Response {
 private:
-    Request    *_req;
-    Client     * _client;
+    std::string _body;
+    size_t      _bodyPos;
+    bool        _formed;
+    bool        _sent;
 
 public:
-    Response(Request *req);
+    Response();
     ~Response();
 
-    void    setClient(Client *client);
+    void    setBodyPos(size_t pos);
+    void    setBody(std::string body);
+
+    size_t      getBodyPos(void)  const;
+    std::string getBody(void)     const;
+
+    bool    formed(void) const ;
+    void    formed(bool formed);
+
+    bool    sent(void) const;
+    void    sent(bool sent);
+
+    void    clear(void);
 };
 

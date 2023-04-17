@@ -3,32 +3,47 @@
 #include <cstdint> // int64_t
 #include <string>  // arg in parseLine()
 
+#include<iostream> // tests внимание
+
 class Client;
 
 class Request {
 private:
+
+    std::string _body;
+    // size_t      _bodyPos;
     bool        _formed;
     int64_t     _expBodySize;
     int64_t     _realBodySize;
-    std::string _body;
-    Client    * _client;
+    bool        _sent;
 
+    Client    * _client;
+    
 public:
     Request(Client *client);
     ~Request(void);
 
     bool    formed(void) const ;
     void    formed(bool formed);
+   
+    void    setExpBodySize(int64_t size);
+    void    setRealBodySize(int64_t size);
+    void    setBody(std::string body);
+    // void    setBodyPos(size_t pos);
+    // size_t      getBodyPos(void)      const;
 
-    void    setExpBodySize(int64_t);
-    void    setRealBodySize(int64_t);
-
-    int64_t getExpBodySize(void) const;
-    int64_t getRealBodySize(void) const;
+    int64_t     getExpBodySize(void)  const;
+    int64_t     getRealBodySize(void) const;
+    std::string getBody(void)         const;
 
     Client *getClient(void);
-    void    setClient(Client *);
+    void    setClient(Client *client);
 
-    bool parseLine(std::string &);
+    bool    parseLine(std::string &line);
+
+    bool    sent(void) const;
+    void    sent(bool sent);
+
+    void    clearBody(void);
 
 };

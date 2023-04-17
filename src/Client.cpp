@@ -6,9 +6,8 @@ Client::Client(int fd_cli, int fd_db, int i_events)
                 : _i_events(i_events)
                 , _fd_cli(fd_cli)
                 , _fd_db(fd_db)
-                , _id(-1) {
-    
-
+                , _id(-1)
+                , _unlink(false) {
 }
 
 Client::~Client(void) {
@@ -22,57 +21,53 @@ Client::~Client(void) {
     if (_fd_db != -1) {
         close(_fd_db);
     }
+
+    clearList(&_requests_cli);
+    clearList(&_requests_db);
+
+    clearList(&_responses_cli);
+    clearList(&_responses_db);
 }
 
 void
-Client::set_id(int id) {
+Client::setId(int id) {
     _id = id;
 }
 
 void
-Client::set_fd_cli(int fd) {
-    _fd_cli = fd;
-}
-
-void
-Client::set_fd_db(int fd) {
-    _fd_db = fd;
+Client::setUnlink(bool unlink) {
+    _unlink = unlink;
 }
 
 int
-Client::get_id(void) {
+Client::getId(void) {
     return _id;    
 }
 
 int     
-Client::get_fd_cli(void) {
+Client::getFdCli(void) {
     return _fd_cli;
 }
 
 int     
-Client::get_fd_db(void) {
+Client::getFdDb(void) {
     return _fd_db;
 }
 
-int     
-Client::get_i_events(void) {
-    return _i_events;
+bool
+Client::getUnlink(void) const {
+    return _unlink;
 }
 
-void Client::tryReceiveRequest(int fd) {
+void Client::tryReceiveData(int fd) {
 
-    std::list<Request *> *req;
-    if (fd == _fd_cli)
-        req = &_requests_cli;
-    else
-        req = &_requests_db;
-    
+    listReq *req = (fd == _fd_cli ? &_requests_cli : &_requests_db);    
     addRequest(req);
     receive(req->back(), fd);
 }
 
 void 
-Client::addRequest(std::list<Request *> *reqlst) {
+Client::addRequest(listReq *reqlst) {
     Request *req = new Request(this);
     if (req == NULL) {
         ::std::cerr << "Cannot allocate memory for Request" << ::std::endl;
@@ -81,16 +76,28 @@ Client::addRequest(std::list<Request *> *reqlst) {
     reqlst->push_back(req);
 }
 
+int 
+Client::addResponse(listRes *reslst) {
+    Response *res = new Response();
+    if (res == NULL) {
+        ::std::cerr << "Cannot allocate memory for Response" << ::std::endl;
+        return 1;
+    }
+    reslst->push_back(res);
+    return 0;
+}
+
 void Client::receive(Request *req, int fd) {
 
     int bytes = read(fd);
+        // ::std::cout << "Client::receive [" << fd << "] bytes " << bytes << ::std::endl; // test
 
     if (bytes < 0) {
         return ;
 
     } else if (bytes == 0) {
-        // ::std::cout << "Client::receive [" << get_fd_read() << "] peer closed connection" << ::std::endl;
-        g_server.unlink(this);
+        ::std::cout << "Client::receive [" << fd << "] peer closed connection" << ::std::endl; // test
+        setUnlink(true);
         return ;
     }
 
@@ -102,8 +109,7 @@ void Client::receive(Request *req, int fd) {
 
         req->parseLine(line);
     }
-    std::cout << "recieved request: is formed" << std::endl;
-
+    // std::cout << "recieved request: is formed" << std::endl; // test
 }
 
 int
@@ -111,12 +117,14 @@ Client::getline(std::string &line, int64_t size, int fd) {
     std::size_t pos = 0;
     std::string *rem = (fd == _fd_cli ? &_rem_cli : &_rem_db);
     if (size < 0) {
-        pos = rem->find(LF);
+
         // если нет LF, читать дальше из fd
+        // pos = rem->find(LF);
+        pos = rem->length();
         if (pos == std::string::npos) {
             return 0;
         }
-        pos += 1;
+        // pos += 1;
 
     } else {
         if (rem->length() == 0 && size != 0) {
@@ -132,7 +140,27 @@ Client::getline(std::string &line, int64_t size, int fd) {
     return 1;
 }
 
-int 
+void
+Client::makeResponse(int fd) {
+    listReq  *reqlst = (fd == _fd_cli? &_requests_cli  : &_requests_db);
+    listRes *reslst = (fd == _fd_cli? &_responses_db  : &_responses_cli);
+    Request *req = reqlst->front();
+
+    if (!addResponse(reslst)) {
+        fillInResponse(reslst->front(), req);
+    }
+    removeRequest(fd);
+
+    // ::std::cout << "makeResponse fd " << fd << "  |" << reslst->front()->getBody() << "| length:" << reslst->front()->getBody().length() << std::endl << std::endl << std::endl; // test
+}
+
+void
+Client::fillInResponse(Response *res, Request *req) {
+    res->setBody(req->getBody());
+    res->formed(true);
+}
+
+int
 Client::read(int fd) {
 
     char buf[BUFFER_SIZE + 1] = { 0 };
@@ -148,8 +176,92 @@ Client::read(int fd) {
 
         std::string *rem = (fd == _fd_cli ? &_rem_cli : &_rem_db);
         rem->append(buf, bytes);
+        // std::cout << "rem length " << rem->length() << std::endl; // test
         return bytes;
     } 
+
+    return bytes;
+}
+
+void
+Client::tryReplyData(int fd) {
+    listRes  *reslst = (fd == _fd_cli? &_responses_cli : &_responses_db);
+
+    if (reslst->empty()) {
+        return ;
+    }
+
+    Response *res = reslst->front();
+    if (res->formed() && !res->sent()) {
+        reply(fd, res);
+    }
+
+    if (res->formed() && res->sent())
+        removeResponse(fd);
+}
+
+void
+Client::removeRequest(int fd) {
+    listReq *reqlst = (fd == _fd_cli ? &_requests_cli : &_requests_db);    
+
+    if (reqlst->size() > 0) {
+        Request *req = reqlst->front();
+        reqlst->pop_front();
+        delete req;
+    }
+}
+
+void
+Client::removeResponse(int fd) {
+    listRes *reslst = (fd == _fd_cli ? &_responses_cli : &_responses_db);    
+
+    if (reslst->size() > 0) {
+        Response *res = reslst->front();
+        reslst->pop_front();
+        delete res;
+    }
+}
+
+void
+Client::reply(int fd, Response *res) {
+
+    if (!res->sent()) {
+        if (res->getBody().empty()) {
+            res->sent(true);
+            return ;
+        }
+    }
+
+    int bytes = write(fd, res);
+    
+    if (bytes < 0)
+        return ;
+    
+    if (bytes == 0) {
+        ::std::cout << "Client:: [" << fd << "] peer closed connection" << ::std::endl;
+        setUnlink(true);
+        return ;
+    }
+
+    if (static_cast<std::size_t>(bytes) >= res->getBody().length() && !res->sent())
+        res->sent(true);
+}
+
+int
+Client::write(int fd, Response *res) {
+    size_t pos = res->getBodyPos();
+
+    long bytes = ::write(fd,  res->getBody().c_str() + pos, res->getBody().length() - pos);
+    
+    if (bytes > 0) {
+        pos += bytes;
+        res->setBodyPos(pos);
+    
+        if (pos >= res->getBody().length()) {
+            // ::std::cout << "Client::write [" << fd << "]: " << pos << "/" << res->getBody().length() << " bytes" << ::std::endl; // test
+            res->clear();
+        }
+    }
 
     return bytes;
 }

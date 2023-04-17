@@ -1,7 +1,8 @@
 #include "Server.hpp"
 
-Server::Server(void) :  _fd_listen(-1)
-                     ,   _fd_epoll(-1) {
+Server::Server(void) : _working(true)
+                     , _fd_listen(-1)
+                     , _fd_epoll(-1) {
     _event.data.fd = -1;
 
     _event.data.fd = listenSockfd();
@@ -95,32 +96,68 @@ Server::check_error(bool is_error, std::string error_msg, int exit_code) {
     return is_error;
 }
 
+void Server::finish(void) {
+    _working = false;
+}
+
+static void
+sigint_handler(int) {
+    std::cout << std::endl;
+    ::std::cout << "Server is stopping CTRL+C" << ::std::endl;
+    g_server.finish();
+}
+
+Client*
+Server::getClient(int i) {
+    int fd = _events[i].data.fd;
+    if(fd == _fd_listen)
+        return NULL;
+
+    size_t id = _connector[fd];
+    if (id >= _clients.size()) {
+        ::std::cout << "Server::start:: invalid clients id: " << fd << " " << id << ::std::endl;
+        return NULL;
+    }
+
+    Client *client = _clients[id];
+    if (client == NULL)
+        return NULL ;
+
+    return client;
+}
+
 void
 Server::start(void) {
     // check_error(1, "TEST", 2);
     int nb_fds;
     int wait_connection = MAX_WAIT_CONNECTION;
-    while ((nb_fds = epoll_wait(_fd_epoll, _events.data(), MAX_EVENTS, -1)) != -1) {
-
+    signal(SIGINT, sigint_handler);
+    while (_working && (nb_fds = epoll_wait(_fd_epoll, _events.data(), MAX_EVENTS, -1)) != -1) {
+    
         for(int i = 0; i < nb_fds; ++i) {
             if(_events[i].events & EPOLLERR) {
                 epollerr(i);
-                continue;
             } else if(_events[i].events & EPOLLHUP) {
+                // EPOLLRDHUP
+                // дочитать, отправить и закрыть соединение. во время чтения данных пир закрыл соединение. внимание доделать.
                 epollhup(i);
-                continue;
             } else if (_events[i].events & EPOLLIN) {
                 epollin(i);
+            } else if (_events[i].events & EPOLLOUT) {
+                epollout(i);
             } else {
                 ::std::cout << "INFO: Server: start: epoll events other" << ::std::endl;
             }
+            // EPOLLPRI 
+            unlink(getClient(i));
         }
         if (wait_connection == nb_fds) {
             wait_connection *= 2;
             _events.reserve(wait_connection); // exception !!! может быть исключение. Обработать в дальнейшем .. внимание
         }
     }
-    check_error(nb_fds == -1,
+    if (_working)
+        check_error(nb_fds == -1,
                 " fatal: Server: epoll_wait -1", 1);
 }
 
@@ -149,49 +186,33 @@ Server::epollin(int i) {
     int fd = _events[i].data.fd;
     if(fd == _fd_listen) {
         // ::std::cout << "Server::pollin:: new test" << ::std::endl;
-        add_new_client(i);
-    } else {
-        // ::std::cout << "Server::pollin:: read test" << ::std::endl;
-        // выбрать клиента
-        size_t id = _connector[fd];
-
-        if (id >= _clients.size()) {
-            ::std::cout << "Server::pollin:: invalid id: " << fd << " " << id << ::std::endl;
-            return ;
-        }
-
-        Client *client = _clients[id];
-        if (client == NULL) {
-            ::std::cout << "Server::pollin:: client for " << id << ": NULL " << ::std::endl;
-            return ;
-        }
-
-        // получить данные от клиента
-        if (fd == client->get_fd_cli()) {
-            client->tryReceiveRequest(client->get_fd_cli());
-        } else {
-            client->tryReceiveRequest(client->get_fd_db());
-        }
-
-        // вызвать чтение - простой тест
-        // char buf[20000] = {0};
-        // read(fd, buf, 2000);
-        // ::std::cout << buf << std::endl;
+        addNewClient(i);
+        return ;
     }
+
+    Client *client = getClient(i);
+    if (client == NULL || client->getUnlink())
+        return;
+
+    client->tryReceiveData(fd);
+    if (client->getUnlink())
+        return;
+
+    client->makeResponse(fd);
 }
 
 void
-Server::add_new_client(int i_events) {
+Server::addNewClient(int i_events) {
 
     int fd_cli = fd_client();
     if (fd_cli == -1)
         return ;
-
     int fd_db  = fd_database();
     if (fd_db == -1) {
         close(fd_cli);
         return ;
     }
+::std::cout << "fd_cli " << fd_cli << "    fd_db " << fd_db << ::std::endl; // test внимание
 
     ::Client *client = new ::Client(fd_cli, fd_db, i_events);
     if (client == NULL) {
@@ -215,15 +236,15 @@ Server::add_new_client(int i_events) {
 int
 Server::addFdsToEpoll(int fd, Client *client) {
     _event.data.fd = fd;
-    _event.events = EPOLLIN;
+    _event.events = EPOLLIN | EPOLLOUT;
     int epoll_result = epoll_ctl(_fd_epoll, EPOLL_CTL_ADD, fd, &_event);
 
     int ret = check_error( epoll_result == -1,
                 "Server: epoll_ctl for new client", 0);
     if (ret) {
         rmClient(client);
-        close(client->get_fd_cli());
-        close(client->get_fd_db());
+        close(client->getFdCli());
+        close(client->getFdDb());
     }
     return ret;
 }
@@ -302,12 +323,12 @@ isClientFree(::Client *client) {
 void
 Server::rmClient(::Client *client) {
 std::cout << "rmClient" << std::endl; // test внимание
-    _clients[client->get_id()] = NULL;
+    _clients[client->getId()] = NULL;
+
+    _connector.erase(client->getFdCli());
+    _connector.erase(client->getFdDb());
+
     delete client;
-
-    _connector.erase(client->get_fd_cli());
-    _connector.erase(client->get_fd_db());
-
 }
 
 void
@@ -321,14 +342,18 @@ Server::addClient(int fd_cli, int fd_db, ::Client *client) {
     *it = client;
 
     size_t id = std::distance(_clients.begin(), it);
-    client->set_id(id); // по id можно найти клиента к удалению при закрытии fd
+    client->setId(id); // по id можно найти клиента к удалению при закрытии fd
 
-    _connector[fd_cli] = _connector[fd_db] = client->get_id();
+    _connector[fd_cli] = _connector[fd_db] = client->getId();
 }
 
 void
 Server::unlink(Client *cli) {
-    int fd_cli = cli->get_fd_cli();
+    if (cli == NULL)
+        return ;
+    if (!cli->getUnlink())
+        return ;
+    int fd_cli = cli->getFdCli();
     int id = _connector[fd_cli];
 
     if (id < 0) {
@@ -339,7 +364,7 @@ Server::unlink(Client *cli) {
         close(fd_cli);
     }
 
-    int fd_db = cli->get_fd_db();
+    int fd_db = cli->getFdDb();
     if (fd_db >= 0) {
         close(fd_db);
     }
@@ -347,4 +372,16 @@ Server::unlink(Client *cli) {
     epoll_ctl(_fd_epoll, EPOLL_CTL_DEL, fd_cli, NULL);
     epoll_ctl(_fd_epoll, EPOLL_CTL_DEL, fd_db, NULL);
     rmClient(cli);
+}
+
+void
+Server::epollout(int i) {
+    int fd = _events[i].data.fd;
+    (void)fd;
+
+    Client *client = getClient(i);
+    if (client == NULL || client->getUnlink())
+        return;
+
+    client->tryReplyData(fd);
 }

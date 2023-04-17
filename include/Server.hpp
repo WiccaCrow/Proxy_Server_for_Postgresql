@@ -13,6 +13,7 @@
 #include <netdb.h>      // getadrinfo(), gai_strerror()
 #include <cstring>      // memset()
 #include <algorithm>    // find_if()
+#include <signal.h>     // signal()
 
 #include "Client.hpp"
 #include "utils.hpp"
@@ -37,6 +38,9 @@ class Server {
     typedef FdIdMap::iterator   iter_fim;
 
     private:
+
+    bool        _working;
+
     struct epoll_event _event;
     ::std::vector<struct epoll_event> _events;
 
@@ -58,13 +62,18 @@ class Server {
     void    epollhup(int i);
 
     void    epollin(int fd);
-    void    add_new_client(int i_events);
+    void    addNewClient(int i_events);
     int     fd_client(void);
     int     fd_database(void);
     int     setConnectionDb(struct addrinfo *lst);
     void    addClient(int fd_cli, int fd_db, ::Client *client);
     void    rmClient(Client *client);
     int     addFdsToEpoll(int fd, Client *client);
+
+    void    epollout(int fd);
+
+    Client * getClient(int i);
+
 
     public:
     // Settings settings;
@@ -80,5 +89,6 @@ class Server {
     void start(void);
     void unlink(Client *Cli);
     void addToDelFdsQ(int fd);
+    void finish(void);
 
 };
