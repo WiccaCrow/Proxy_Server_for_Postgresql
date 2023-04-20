@@ -14,6 +14,9 @@
 #include <cstring>      // memset()
 #include <algorithm>    // find_if()
 #include <signal.h>     // signal()
+#include <sys/socket.h> // inet_ntoa()
+#include <netinet/in.h> // inet_ntoa()
+#include <arpa/inet.h>  // inet_ntoa()
 
 #include "Client.hpp"
 #include "utils.hpp"
@@ -30,65 +33,53 @@
 #define COLOR_END "\033[0m"
 
 class Server {
-    public:
+public:
     typedef std::vector<::Client *>       ClientsVec;
     typedef ClientsVec::iterator          iter_cv;
 
     typedef std::map<int, int>  FdIdMap;
     typedef FdIdMap::iterator   iter_fim;
 
-    private:
+private:
 
     bool        _working;
-
     struct epoll_event _event;
     ::std::vector<struct epoll_event> _events;
-
-    ClientsVec   _clients;
-    FdIdMap      _connector;
-
-
-    int     _fd_listen;
-    int     _fd_epoll;
+    ClientsVec  _clients;
+    FdIdMap     _connector;
+    int         _fd_listen;
+    int         _fd_epoll;
 
     int     listenSockfd(void);
 
-    protected:
-    void    clear(void);
-    int     check_error(bool is_error, std::string error_msg, int exit_code);
-    void    exit(::std::string error_msg, int exit_code);
+protected:
+    void        clear(void);
+    int         checkError(bool is_error, std::string error_msg, int exit_code);
 
-    void    epollerr(int i);
-    void    epollhup(int i);
+    void        epollerr(int i);
+    void        epollhup(int i);
 
-    void    epollin(int fd);
-    void    addNewClient(int i_events);
-    int     fd_client(void);
-    int     fd_database(void);
-    int     setConnectionDb(struct addrinfo *lst);
-    void    addClient(int fd_cli, int fd_db, ::Client *client);
-    void    rmClient(Client *client);
-    int     addFdsToEpoll(int fd, Client *client);
+    void        epollin(int fd);
+    void        addNewClient(int i_events);
+    int         fdClient(struct sockaddr_in &clientData);
+    int         fdDatabase(void);
+    int         setConnectionDb(struct addrinfo *lst);
+    std::string clientIpPort(struct sockaddr_in &clientData);
+    void        addClient(int fd_cli, int fd_db, ::Client *client);
+    void        rmClient(Client *client);
+    int         addFdsToEpoll(int fd, Client *client);
 
-    void    epollout(int fd);
+    void        epollout(int fd);
 
-    Client * getClient(int i);
+    Client *    getClient(int i);
 
 
-    public:
-    // Settings settings;
-
+public:
     Server(void);
     ~Server(void);
-    // Server(const Server &);
-    // Server &operator=(const Server &);
-
-    // ServersList &operator[](std::size_t port);
-    // ServersMap  &getServerBlocks(void);
 
     void start(void);
     void unlink(Client *Cli);
-    void addToDelFdsQ(int fd);
     void finish(void);
 
 };

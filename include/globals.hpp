@@ -6,11 +6,17 @@ extern Server g_server;
 extern std::string g_db_host;
 extern std::string g_db_port;
 
-#ifndef LF
-    # define LF "\n"
-#endif
+extern std::ostream *g_ofs_log;
 
-// #ifndef CRLF
-//     # define CRLF CR LF
+extern int g_deep_logs;
+extern int g_output;
+
+extern std::string g_color;
+extern std::string g_color_end;
+
+// #ifndef LF
+//     # define LF "\n"
 // #endif
+
+
 

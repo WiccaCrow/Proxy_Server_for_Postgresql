@@ -32,6 +32,7 @@ DFLT_DIR     = default
 
 SRCS         =  main.cpp		Server.cpp		Client.cpp   \
                 utils.cpp		Request.cpp		Response.cpp \
+				config.cpp
 
 
 OBJS = $(addprefix $(OBJS_DIR)/, $(SRCS:.cpp=.o))

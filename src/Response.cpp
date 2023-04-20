@@ -1,5 +1,9 @@
 #include "Response.hpp"
 
+
+// Constructors and destructor:
+
+
 Response::Response(void)
                 : _bodyPos(0)
                 , _formed(false)
@@ -9,14 +13,15 @@ Response::Response(void)
 Response::~Response() {
 }
 
-std::string
-Response::getBody(void) const {
-    return _body;
-}
 
-size_t
-Response::getBodyPos(void) const {
-    return _bodyPos;
+
+// public:
+
+
+
+void
+Response::setBodyPos(size_t pos) {
+    _bodyPos = pos;
 }
 
 void
@@ -24,9 +29,14 @@ Response::setBody(std::string body) {
     _body = body;
 }
 
-void
-Response::setBodyPos(size_t pos) {
-    _bodyPos = pos;
+size_t
+Response::getBodyPos(void) const {
+    return _bodyPos;
+}
+
+std::string
+Response::getBody(void) const {
+    return _body;
 }
 
 bool

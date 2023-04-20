@@ -8,10 +8,10 @@
 class Client;
 
 class Request {
+    
 private:
 
     std::string _body;
-    // size_t      _bodyPos;
     bool        _formed;
     int64_t     _expBodySize;
     int64_t     _realBodySize;
@@ -29,8 +29,6 @@ public:
     void    setExpBodySize(int64_t size);
     void    setRealBodySize(int64_t size);
     void    setBody(std::string body);
-    // void    setBodyPos(size_t pos);
-    // size_t      getBodyPos(void)      const;
 
     int64_t     getExpBodySize(void)  const;
     int64_t     getRealBodySize(void) const;
@@ -45,5 +43,4 @@ public:
     void    sent(bool sent);
 
     void    clearBody(void);
-
 };

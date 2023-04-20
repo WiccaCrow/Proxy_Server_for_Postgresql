@@ -1,20 +1,19 @@
 #include "main.hpp"
 
-Server g_server;
+int     main(int ac, char **av) {
 
-int main(int ac, char **av) {
-
-    std::cout << "Hello" << std::endl;
-    if (check_ac_av(ac, av))
+    if (checkArgumens(ac, av))
         return 1;
     
+    config();
+    openLogFile();
     g_server.start();
-    std::cout << "Bye" << std::endl;
+    closeLogFile();
 
     return 0;
 }
 
-int    check_ac_av(int ac, char **av) {
+int     checkArgumens(int ac, char **av) {
 
     if (ac == 1) {
         std::cout << "Default settings for PostgreSQL:\n    host    127.0.0.1 \n    port    5432" << std::endl;
@@ -52,14 +51,14 @@ int    check_ac_av(int ac, char **av) {
     return check_av2;
 }
 
-int    check_host_or_port(char* h_or_p) {
+int     check_host_or_port(char* h_or_p) {
     if (h_or_p[0] == 'h') {
-        return (check_host(h_or_p));
+        return (checkHost(h_or_p));
     }
-    return (check_port(h_or_p + 1));
+    return (checkPort(h_or_p + 1));
 }
 
-int check_port(std::string port) {
+int     checkPort(std::string port) {
     if (!port.empty() 
         && port.length() < 6
         && (port.find_first_not_of("0123456789") == port.npos) 
@@ -72,7 +71,7 @@ int check_port(std::string port) {
     return 1;
 }
 
-int    check_host(std::string host) {
+int     checkHost(std::string host) {
 
     if (host.length() > 16 || host.length() < 8 ||
         !std::isdigit(host[1])) {
@@ -106,3 +105,41 @@ int    check_host(std::string host) {
     g_db_host = host;
     return 0;
 }
+
+std::string
+        nameLogFile(void) {
+    std::time_t t = std::time(nullptr);
+    std::tm* now = std::localtime(&t);
+
+    std::string str = LOG_PATH "/logs_" +
+    std::to_string(now->tm_year + 1900) + "." +
+    std::to_string(now->tm_mon + 1) + "." +
+    std::to_string(now->tm_mday) + "_" +
+    std::to_string(now->tm_hour) + ":" +
+    std::to_string(now->tm_min) + ":" +
+    std::to_string(now->tm_sec);
+    return str;
+}
+
+void    openLogFile(void) {
+    if (g_output == 1) {
+        g_ofs_log = &stdcout;
+        return ;
+    }
+    g_color = g_color_end = "";
+    g_ofs_log = &ofs_log;
+    std::string logFile = nameLogFile();
+    ofs_log.open(logFile.c_str(), std::ofstream::out);
+    if (ofs_log.is_open())
+        return ;
+    std::cerr << "Fatal: cannot open logs file" << std::endl;
+    exit(1);
+}
+
+void    closeLogFile(void) {
+    if (g_output == 0) {
+        ofs_log.close();
+        return ;
+    }
+}
+

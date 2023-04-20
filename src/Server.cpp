@@ -1,21 +1,23 @@
 #include "Server.hpp"
 
+
+// Constructors and destructor:
+
+
 Server::Server(void) : _working(true)
                      , _fd_listen(-1)
                      , _fd_epoll(-1) {
-    _event.data.fd = -1;
-
     _event.data.fd = listenSockfd();
     _event.events = EPOLLIN;
 
     _fd_epoll  =  epoll_create1(EPOLL_CLOEXEC);
-    check_error(_fd_epoll == -1,
+    checkError(_fd_epoll == -1,
                 "epoll_create1 not created", 1);
 
-    check_error(epoll_ctl(_fd_epoll, EPOLL_CTL_ADD, _event.data.fd, &_event),
+    checkError(epoll_ctl(_fd_epoll, EPOLL_CTL_ADD, _event.data.fd, &_event),
                 "epoll_ctl", 1);
     
-    _events.reserve(MAX_WAIT_CONNECTION); // exception !!! может быть исключение. Обработать в дальнейшем .. внимание
+    _events.reserve(MAX_WAIT_CONNECTION);
 }
 
 Server::~Server(void) {
@@ -25,8 +27,66 @@ Server::~Server(void) {
             delete *it;
         }
     }
-    ::std::cout << "destr\n";
 }
+
+
+
+// private:
+
+
+
+int
+Server::listenSockfd(void) {
+    _event.data.fd = -1;
+
+    // for getaddrinfo():
+    struct addrinfo *p, *servinfo, hints;
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM; // TCP
+    hints.ai_flags = AI_PASSIVE;     // my IP
+
+    int er_getadrinfo = getaddrinfo(NULL, PORT, &hints, &servinfo);
+    checkError(er_getadrinfo,
+                gai_strerror(er_getadrinfo), 1);
+
+    // for socket();
+    int optval = 1;
+    for (p = servinfo; p != NULL; p = p->ai_next) {
+        _fd_listen = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+        if ( _fd_listen == -1) {
+            ::std::cerr << "Info: socket -1. Tying next struct addrinfo..." << ::std::endl;
+            continue;
+        }
+        checkError(setsockopt(_fd_listen, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(int)) == -1,
+                    "setsockopt", 1);
+    // for bind();
+        if (bind(_fd_listen, p->ai_addr, p->ai_addrlen) == -1) {
+            close(_fd_listen);
+            ::std::cerr << "Info: bind -1. Tying next struct addrinfo..." << ::std::endl;
+            continue;
+        }
+        break;
+    }
+
+    checkError(p == NULL,
+                "cannot bind", 1);
+    
+    freeaddrinfo(servinfo);
+
+    // for listen();
+    checkError(listen(_fd_listen, MAX_WAIT_CONNECTION) == -1,
+                "listen", 1 );
+
+    return _fd_listen;
+}
+
+
+
+// protected:
+
+
 
 void
 Server::clear() {
@@ -39,53 +99,7 @@ Server::clear() {
 }
 
 int
-Server::listenSockfd(void) {
-
-    // for getaddrinfo():
-    struct addrinfo *p, *servinfo, hints;
-
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM; // TCP
-    hints.ai_flags = AI_PASSIVE;     // my IP
-
-    int er_getadrinfo = getaddrinfo(NULL, PORT, &hints, &servinfo);
-    check_error(er_getadrinfo,
-                gai_strerror(er_getadrinfo), 1);
-
-    // for socket();
-    int optval = 1;
-    for (p = servinfo; p != NULL; p = p->ai_next) {
-        _fd_listen = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-        if ( _fd_listen == -1) {
-            ::std::cerr << "Info: socket -1. Tying next struct addrinfo..." << ::std::endl;
-            continue;
-        }
-        check_error(setsockopt(_fd_listen, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(int)) == -1,
-                    "setsockopt", 1);
-    // for bind();
-        if (bind(_fd_listen, p->ai_addr, p->ai_addrlen) == -1) {
-            close(_fd_listen);
-            ::std::cerr << "Info: bind -1. Tying next struct addrinfo..." << ::std::endl;
-            continue;
-        }
-        break;
-    }
-
-    check_error(p == NULL,
-                "cannot bind", 1);
-    
-    freeaddrinfo(servinfo);
-
-    // for listen();
-    check_error(listen(_fd_listen, MAX_WAIT_CONNECTION) == -1,
-                "listen", 1 );
-
-    return _fd_listen;
-}
-
-int
-Server::check_error(bool is_error, std::string error_msg, int exit_code) {
+Server::checkError(bool is_error, std::string error_msg, int exit_code) {
     if (is_error)
         ::std::cerr << (exit_code ? COLOR_ERROR_FATAL : COLOR_ERROR) << "Error: " << error_msg << COLOR_END << ::std::endl;
 
@@ -96,15 +110,200 @@ Server::check_error(bool is_error, std::string error_msg, int exit_code) {
     return is_error;
 }
 
-void Server::finish(void) {
-    _working = false;
+void
+Server::epollerr(int i) {
+    checkError(1, "epoll: EPOLLERR", 0);
+    checkError(_events[i].data.fd == _fd_listen, 
+                "fatal: EPOLLERR on listening socket", 1);
+    close(_events[i].data.fd);
+    getClient(i)->setUnlink(true);
 }
 
-static void
-sigint_handler(int) {
-    std::cout << std::endl;
-    ::std::cout << "Server is stopping CTRL+C" << ::std::endl;
-    g_server.finish();
+void
+Server::epollhup(int i) {
+    checkError(1, "epoll: EPOLLHUP", 0);
+    checkError(_events[i].data.fd == _fd_listen, 
+                "fatal: EPOLLHUP on listening socket", 1);
+    close(_events[i].data.fd);
+    getClient(i)->setUnlink(true);
+}
+
+void
+Server::epollin(int i) {
+    int fd = _events[i].data.fd;
+    if(fd == _fd_listen) {
+        addNewClient(i);
+        return ;
+    }
+
+    Client *client = getClient(i);
+    if (client == NULL || client->getUnlink())
+        return;
+
+    client->tryReceiveData(fd);
+    if (client->getUnlink())
+        return;
+
+    client->makeResponse(fd);
+}
+
+void
+Server::addNewClient(int i_events) {
+
+    struct sockaddr_in clientData;
+    int fd_cli = fdClient(clientData);
+    if (fd_cli == -1)
+        return ;
+
+    int fd_db  = fdDatabase();
+    if (fd_db == -1) {
+        close(fd_cli);
+        return ;
+    }
+
+    ::Client *client = new ::Client(clientIpPort(clientData), fd_cli, fd_db, i_events);
+    if (client == NULL) {
+        close(fd_cli);
+        if (fd_db != fd_cli)
+            close(fd_db);
+        return ;
+    }
+
+    addClient(fd_cli, fd_db, client);
+
+    if (addFdsToEpoll(fd_cli, client))
+        return ;
+
+    if (addFdsToEpoll(fd_db,  client))
+        epoll_ctl(_fd_epoll, EPOLL_CTL_DEL, fd_cli, NULL);
+}
+
+int    
+Server::fdClient(struct sockaddr_in &clientData) {
+
+    socklen_t          clientLen = sizeof(clientData);
+    
+    int fd = accept(_fd_listen, (struct sockaddr *)&clientData, &clientLen);
+    if (fd < 0) {
+        checkError(1, " not fatal: Server::accept error", 0);
+        return -1;
+    }
+    if (fd_nonblock(fd)) {
+        checkError(1, " not fatal: Server::nonblock error(fcntl). Client was not added.", 0);
+        return -1;
+    }
+    return fd;
+}
+
+int 
+Server::fdDatabase(void) {
+
+    struct addrinfo *addrlst = NULL;
+
+    if (getaddrinfo(g_db_host.c_str(), g_db_port.c_str(), NULL, &addrlst)) {
+        checkError(1, "Proxy::getaddrinfo -> " + g_db_host + ":" + g_db_port, 1);
+        return -1;
+    }
+
+    int fd = setConnectionDb(addrlst);
+    freeaddrinfo(addrlst);
+
+    return fd;
+}
+
+int
+Server::setConnectionDb(struct addrinfo *lst) {
+
+    // get socket
+    int fd = ::socket(PF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        checkError(fd < 0, "Server: db connection: Cannot create socket", 0);
+        return -1;
+    }
+
+    // try to connect
+    int connected = 1;
+    for (; lst && connected; lst = lst->ai_next) {
+        if (lst->ai_socktype != SOCK_STREAM) {
+            continue;
+        }
+        connected = ::connect(fd, lst->ai_addr, lst->ai_addrlen);
+    }
+
+    // set nonblock
+    if (checkError(connected == -1, 
+                    "Server: db connection: connection failed", 0) ||
+        checkError(fd_nonblock(fd) < 0, 
+                    "Server: db connection: fcntl failed ", 0)) {
+        return -1;
+    }
+    // std::cout << "connaction established" << std::endl; // test
+    return fd;
+}
+
+std::string 
+Server::clientIpPort(struct sockaddr_in &clientData) {
+    std::string str = inet_ntoa(clientData.sin_addr);
+    str += ':';
+    str += std::to_string(ntohs(clientData.sin_port));
+    return (str);
+}
+
+static int
+isClientFree(::Client *client) {
+    return (client == NULL);
+}
+
+void
+Server::addClient(int fd_cli, int fd_db, ::Client *client) {
+
+    iter_cv it = ::std::find_if(_clients.begin(), _clients.end(), isClientFree);
+    if (it == _clients.end()) {
+        it = _clients.insert(_clients.end(), client);
+    }
+     
+    *it = client;
+
+    size_t id = std::distance(_clients.begin(), it);
+    client->setId(id);
+
+    _connector[fd_cli] = _connector[fd_db] = client->getId();
+}
+
+void
+Server::rmClient(::Client *client) {
+    _clients[client->getId()] = NULL;
+    _connector.erase(client->getFdCli());
+    _connector.erase(client->getFdDb());
+    delete client;
+}
+
+int
+Server::addFdsToEpoll(int fd, Client *client) {
+    _event.data.fd = fd;
+    _event.events = EPOLLIN | EPOLLOUT;
+    int epoll_result = epoll_ctl(_fd_epoll, EPOLL_CTL_ADD, fd, &_event);
+
+    int ret = checkError( epoll_result == -1,
+                "Server: epoll_ctl for new client", 0);
+    if (ret) {
+        rmClient(client);
+        close(client->getFdCli());
+        close(client->getFdDb());
+    }
+    return ret;
+}
+
+void
+Server::epollout(int i) {
+    int fd = _events[i].data.fd;
+    (void)fd;
+
+    Client *client = getClient(i);
+    if (client == NULL || client->getUnlink())
+        return;
+
+    client->tryReplyData(fd);
 }
 
 Client*
@@ -126,9 +325,21 @@ Server::getClient(int i) {
     return client;
 }
 
+
+
+// public:
+
+
+
+static void
+sigint_handler(int) {
+    std::cout << std::endl;
+    ::std::cout << "Server is stopping CTRL+C" << ::std::endl;
+    g_server.finish();
+}
+
 void
 Server::start(void) {
-    // check_error(1, "TEST", 2);
     int nb_fds;
     int wait_connection = MAX_WAIT_CONNECTION;
     signal(SIGINT, sigint_handler);
@@ -138,8 +349,6 @@ Server::start(void) {
             if(_events[i].events & EPOLLERR) {
                 epollerr(i);
             } else if(_events[i].events & EPOLLHUP) {
-                // EPOLLRDHUP
-                // дочитать, отправить и закрыть соединение. во время чтения данных пир закрыл соединение. внимание доделать.
                 epollhup(i);
             } else if (_events[i].events & EPOLLIN) {
                 epollin(i);
@@ -157,194 +366,8 @@ Server::start(void) {
         }
     }
     if (_working)
-        check_error(nb_fds == -1,
+        checkError(nb_fds == -1,
                 " fatal: Server: epoll_wait -1", 1);
-}
-
-void
-Server::epollerr(int i) {
-    ::std::cout << " epollerr client i = " << i << ::std::endl;
-    check_error(1, "epoll: EPOLLERR", 0);
-    check_error(_events[i].data.fd == _fd_listen, 
-                "fatal: EPOLLERR on listening socket", 1);
-    close(_events[i].data.fd);
-    _events[i].data.fd = -1;
-}
-
-void
-Server::epollhup(int i) {
-    ::std::cout << " epollhup client i = " << i << ::std::endl;
-    check_error(1, "epoll: EPOLLHUP", 0);
-    check_error(_events[i].data.fd == _fd_listen, 
-                "fatal: EPOLLHUP on listening socket", 1);
-    close(_events[i].data.fd);
-    _events[i].data.fd = -1;
-}
-
-void
-Server::epollin(int i) {
-    int fd = _events[i].data.fd;
-    if(fd == _fd_listen) {
-        // ::std::cout << "Server::pollin:: new test" << ::std::endl;
-        addNewClient(i);
-        return ;
-    }
-
-    Client *client = getClient(i);
-    if (client == NULL || client->getUnlink())
-        return;
-
-    client->tryReceiveData(fd);
-    if (client->getUnlink())
-        return;
-
-    client->makeResponse(fd);
-}
-
-void
-Server::addNewClient(int i_events) {
-
-    int fd_cli = fd_client();
-    if (fd_cli == -1)
-        return ;
-    int fd_db  = fd_database();
-    if (fd_db == -1) {
-        close(fd_cli);
-        return ;
-    }
-::std::cout << "fd_cli " << fd_cli << "    fd_db " << fd_db << ::std::endl; // test внимание
-
-    ::Client *client = new ::Client(fd_cli, fd_db, i_events);
-    if (client == NULL) {
-        ::std::cout << "Error: not fatal: Server::Cannot allocate memory for Client" << ::std::endl;
-        close(fd_cli);
-        if (fd_db != fd_cli)
-            close(fd_db);
-        return ;
-    }
-
-    addClient(fd_cli, fd_db, client);
-    // ::std::cout << "Info: Server::connect [" << fd << "] " << ::std::endl;
-
-    if (addFdsToEpoll(fd_cli, client))
-        return ;
-
-    if (addFdsToEpoll(fd_db,  client))
-        epoll_ctl(_fd_epoll, EPOLL_CTL_DEL, fd_cli, NULL);
-}
-
-int
-Server::addFdsToEpoll(int fd, Client *client) {
-    _event.data.fd = fd;
-    _event.events = EPOLLIN | EPOLLOUT;
-    int epoll_result = epoll_ctl(_fd_epoll, EPOLL_CTL_ADD, fd, &_event);
-
-    int ret = check_error( epoll_result == -1,
-                "Server: epoll_ctl for new client", 0);
-    if (ret) {
-        rmClient(client);
-        close(client->getFdCli());
-        close(client->getFdDb());
-    }
-    return ret;
-}
-
-int 
-Server::fd_database(void) {
-
-    struct addrinfo *addrlst = NULL;
-
-    if (getaddrinfo(g_db_host.c_str(), g_db_port.c_str(), NULL, &addrlst)) {
-        check_error(1, "Proxy::getaddrinfo -> " + g_db_host + ":" + g_db_port, 1);
-        return -1;
-    }
-
-    int fd = setConnectionDb(addrlst);
-    freeaddrinfo(addrlst);
-
-    return fd;
-}
-
-int
-Server::setConnectionDb(struct addrinfo *lst) {
-
-    // get socket
-    int fd = ::socket(PF_INET, SOCK_STREAM, 0);
-    if (fd < 0) {
-        check_error(fd < 0, "Server: db connection: Cannot create socket", 0);
-        return -1;
-    }
-
-    // try to connect
-    int connected = 1;
-    for (; lst && connected; lst = lst->ai_next) {
-        if (lst->ai_socktype != SOCK_STREAM) {
-            continue;
-        }
-        connected = ::connect(fd, lst->ai_addr, lst->ai_addrlen);
-    }
-
-    // set nonblock
-    if (check_error(connected == -1, 
-                    "Server: db connection: connection failed", 0) ||
-        check_error(fcntl(fd, F_SETFL, O_NONBLOCK) < 0, 
-                    "Server: db connection: fcntl(O_NONBLOCK) failed ", 0)) {
-        close(fd);
-        return -1;
-    }
-    // std::cout << "connaction established" << std::endl; // test
-    return fd;
-}
-
-int    
-Server::fd_client(void) {
-
-    struct sockaddr_in clientData;
-    socklen_t          clientLen = sizeof(clientData);
-    
-    int fd = accept(_fd_listen, (struct sockaddr *)&clientData, &clientLen);
-    if (fd < 0) {
-        check_error(1, " not fatal: Server::accept error", 0);
-        return -1;
-    }
-    if (fd_nonblock(fd)) {
-        check_error(1, " not fatal: Server::nonblock error(fcntl). Client was not added.", 0);
-        close(fd);
-        return -1;
-    }
-    return fd;
-}
-
-static int
-isClientFree(::Client *client) {
-    return (client == NULL);
-}
-
-void
-Server::rmClient(::Client *client) {
-std::cout << "rmClient" << std::endl; // test внимание
-    _clients[client->getId()] = NULL;
-
-    _connector.erase(client->getFdCli());
-    _connector.erase(client->getFdDb());
-
-    delete client;
-}
-
-void
-Server::addClient(int fd_cli, int fd_db, ::Client *client) {
-
-    iter_cv it = ::std::find_if(_clients.begin(), _clients.end(), isClientFree);
-    if (it == _clients.end()) {
-        it = _clients.insert(_clients.end(), client);
-    }
-     
-    *it = client;
-
-    size_t id = std::distance(_clients.begin(), it);
-    client->setId(id); // по id можно найти клиента к удалению при закрытии fd
-
-    _connector[fd_cli] = _connector[fd_db] = client->getId();
 }
 
 void
@@ -374,14 +397,7 @@ Server::unlink(Client *cli) {
     rmClient(cli);
 }
 
-void
-Server::epollout(int i) {
-    int fd = _events[i].data.fd;
-    (void)fd;
-
-    Client *client = getClient(i);
-    if (client == NULL || client->getUnlink())
-        return;
-
-    client->tryReplyData(fd);
+void 
+Server::finish(void) {
+    _working = false;
 }
