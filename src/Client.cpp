@@ -231,7 +231,7 @@ Client::logBlind(int fd, std::string &str, bool isClosed) {
         ++id_pos;
     }
     for (int i = 1; (i + id_pos) < 3 && it != str.cend(); ++i) {
-        *g_ofs_log << " [" << g_color;
+        *g_ofs_log << g_color << " [";
         for (unsigned char c = *it; it != str.cend() && it != str.cbegin() + 4 * i + id_pos; ++it, c = *it) {
             *g_ofs_log << " " << (unsigned int)c << " ";
         }
@@ -240,7 +240,7 @@ Client::logBlind(int fd, std::string &str, bool isClosed) {
 
     for (unsigned char c = *it; it != str.cend(); ++it, c = *it) {
         if (!isprint(c)) {
-            *g_ofs_log << " [" << g_color;
+            *g_ofs_log << g_color << " [";
             for (; !isprint(c) && it != str.cend(); ++it, c = *it)
                 *g_ofs_log << " " << (unsigned int)c << " ";
             *g_ofs_log << "] " << g_color_end;
