@@ -22,7 +22,7 @@ std::ostream *g_ofs_log;
 std::ostream  stdcout(std::cout.rdbuf());
 std::ofstream ofs_log;
 
-int g_deep_logs = 3;
+int g_deep_logs = 4;
 int g_output = 0;
 
 //  PostgeSQL server
@@ -35,7 +35,7 @@ Server        g_server;
 
 // main.cpp functions
 int    checkArgumens(int ac, char **av);
-int    check_host_or_port(char* h_or_p);
+int    check_host_and_port(char* h_or_p);
 int    checkPort(std::string port);
 int    checkHost(std::string host);
 

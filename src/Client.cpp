@@ -1,6 +1,6 @@
 #include "Client.hpp"
 #include "Server.hpp"
-
+#include "ParserCli.hpp"
 
 // Constructors and destructor:
 
@@ -39,6 +39,11 @@ Client::~Client(void) {
 
 
 
+/* void    addRequest(listReq *reqlst);
+* Adds a new empty Request object to the end of the list listReq 
+* (_requests_cli or _requests_db).
+*/
+
 void 
 Client::addRequest(listReq *reqlst) {
     Request *req = new Request(this);
@@ -48,6 +53,10 @@ Client::addRequest(listReq *reqlst) {
     }
     reqlst->push_back(req);
 }
+
+/* void receive(Request *req, int fd); 
+* Receive data from clients or data base.
+*/
 
 void
 Client::receive(Request *req, int fd) {
@@ -59,7 +68,7 @@ Client::receive(Request *req, int fd) {
         return ;
 
     } else if (bytes == 0) {
-        logs(fd, "peer closed connection", 1);
+        logs(fd, "peer closed connection", true);
         setUnlink(true);
         return ;
     }
@@ -88,7 +97,6 @@ Client::read(int fd) {
 
         std::string *rem = (fd == _fd_cli ? &_rem_cli : &_rem_db);
         rem->append(buf, bytes);
-        // std::cout << "rem length " << rem->length() << std::endl; // test
         return bytes;
     } 
 
@@ -100,15 +108,10 @@ Client::getline(std::string &line, int64_t size, int fd) {
     std::size_t pos = 0;
     std::string *rem = (fd == _fd_cli ? &_rem_cli : &_rem_db);
     if (size < 0) {
-
-        // если нет LF, читать дальше из fd // для HTTP
-        // pos = rem->find(LF);
         pos = rem->length();
         if (pos == std::string::npos) {
             return 0;
         }
-        // pos += 1;
-
     } else {
         if (rem->length() == 0 && size != 0) {
             return 0;
@@ -160,16 +163,82 @@ Client::write(int fd, Response *res) {
 }
 
 void
-Client::logs(int fd, std::string str, int isClosed) {
+Client::logs(int fd, std::string str, bool isClosed) {
     if (!checkDeepLogs(fd))
         return ;
     if (getUnlink())
         return ;
+    if (fd == _fd_cli && logOnlyCliCommands(fd, str, isClosed))
+        return;
+    logBlind(fd, str, isClosed);
+}
+
+bool
+Client::checkDeepLogs(int fd) {
+    if (g_deep_logs == 0 || 
+        (g_deep_logs == 1 && fd != _fd_cli) ||
+        (g_deep_logs == 4 && fd != _fd_cli) ||
+        (g_deep_logs == 2 && fd != _fd_db))
+        return 0;
+    return 1;
+}
+
+void
+Client::logHostPortFd(int fd, bool isClosed) {
+    *g_ofs_log << std::left << std::setw(13) << std::setfill(' ') << std::setiosflags (std::ios::showbase)
+              << (fd == _fd_cli ? "Client" : "Postgres") 
+              << (fd == _fd_cli ? "  from IP:port[ " : "  to   IP:port[ " )
+              << std::left << std::setw(21) << std::setfill(' ') << std::setiosflags (std::ios::showbase)
+              << _clientHostPort << "] fd[" << fd << "]  " << (isClosed ? "" : "datas: ")
+              << std::resetiosflags(std::ios::showbase);
+}
+
+bool   
+Client::logOnlyCliCommands(int fd, std::string &str, bool isClosed) {
+    // std::string msg("RK3CGHWDIEVvnNAtS1sZT dc B2CfDEHFpPpQppSX");
+    // size_t id = msg.find_first_of(str[0]);
+    if (g_deep_logs != 4)
+        return 0;
+    // if (id != msg.npos) {
+    if (str[0] == 'Q') {
+        logTime(g_ofs_log);
+        logHostPortFd(fd, isClosed);
+        parse(str);
+    }
+    return 1;
+}
+
+void
+Client::logBlind(int fd, std::string &str, bool isClosed) {
     logTime(g_ofs_log);
-    logsHostPortFd(fd, isClosed);
+    logHostPortFd(fd, isClosed);
+    if (isClosed) {
+        *g_ofs_log << str << std::endl;
+        return ;
+    }
 
     auto it = str.cbegin();
-    for(unsigned char c = *it; it != str.cend(); ++it, c = *it) {
+    std::string msg;
+    if (fd == _fd_db)
+        msg = "RK3CGHWDIEVvnNAtS1sZTdc";
+    else
+        msg = "dcB2CfDEHFpPQSX";
+    size_t id = msg.find_first_of(str[0]);
+    int id_pos = 0;
+    if (id != msg.npos) {
+        *g_ofs_log << *it ;
+        ++it;
+        ++id_pos;
+    }
+    for (int i = 1; (i + id_pos) < 3 && it != str.cend(); ++i) {
+        *g_ofs_log << " [" << g_color;
+        for (unsigned char c = *it; it != str.cend() && it != str.cbegin() + 4 * i + id_pos; ++it, c = *it) {
+            *g_ofs_log << " " << (unsigned int)c << " ";
+        }
+        *g_ofs_log << "] " << g_color_end;
+    }
+
+    for (unsigned char c = *it; it != str.cend(); ++it, c = *it) {
         if (!isprint(c)) {
             *g_ofs_log << " [" << g_color;
             for (; !isprint(c) && it != str.cend(); ++it, c = *it)
@@ -181,25 +250,6 @@ Client::logs(int fd, std::string str, int isClosed) {
         *g_ofs_log << (unsigned char)c ;
     }
     *g_ofs_log << ::std::endl;
-}
-
-bool
-Client::checkDeepLogs(int fd) {
-    if (g_deep_logs == 0 || 
-        (g_deep_logs == 1 && fd != _fd_cli) ||
-        (g_deep_logs == 2 && fd != _fd_db))
-        return 0;
-    return 1;
-}
-
-void
-Client::logsHostPortFd(int fd, int isClosed) {
-    *g_ofs_log << std::left << std::setw(13) << std::setfill(' ') << std::setiosflags (std::ios::showbase)
-              << (fd == _fd_cli ? "Client" : "Postgres") 
-              << (fd == _fd_cli ? "  from IP:port[ " : "  to   IP:port[ " )
-              << std::left << std::setw(21) << std::setfill(' ') << std::setiosflags (std::ios::showbase)
-              << _clientHostPort << "] fd[" << fd << "]  " << (isClosed ? "" : "datas: ")
-              << std::resetiosflags(std::ios::showbase);
 }
 
 
@@ -325,7 +375,7 @@ Client::reply(int fd, Response *res) {
         return ;
     
     if (bytes == 0) {
-        logs(fd, "peer closed connection", 1);
+        logs(fd, "peer closed connection", true);
         setUnlink(true);
         return ;
     }

@@ -1,11 +1,17 @@
 #include "config.hpp"
 
+/* int     configValue(const char * str_conf, const char *msg, size_t length);
+*  The function returns the numeric value of the parameter in the configuration.
+*/
 int     configValue(const char * str_conf, const char *msg, size_t length) {
     if (!std::strncmp(str_conf, msg, length))
         return (int)str_conf[length] - 48;
     return -1;
 }
 
+/* void    config(void);
+*  The function loads settings from a configuration file.
+*/
 void    config(void) {
     std::string line;
  
@@ -32,14 +38,14 @@ void    config(void) {
             g_deep_logs = g_output = -1;
             break ;
         }
-        if (g_deep_logs < 0 || g_output < 0 || g_deep_logs > 3 || g_output > 1)
+        if (g_deep_logs < 0 || g_output < 0 || g_deep_logs > 4 || g_output > 1)
             break;
     }
 
     ofs_conf.close();
     
     if (i_deep_logs == 2 || i_output == 2 || g_deep_logs < 0 || g_output < 0 ||
-        g_deep_logs > 3 || g_output > 1) {
+        g_deep_logs > 4 || g_output > 1) {
         if (i_deep_logs == 2) 
             std::cerr << "Error: fatal: duplicated 'deep logs' : ";
         if (i_output == 2)

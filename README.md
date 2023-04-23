@@ -43,7 +43,7 @@ make
 Для более гибкой настройки логирования предусмотрен файл `TCPserv.conf`.
 
 В нем можно настроить два параметра:\
-`deep logs` глубина логирования от `0` до `3`, \
+`deep logs` глубина логирования от `0` до `4`, \
 `output` выведение логов `0` или `1`.
 
 Параметры конфига:
@@ -52,7 +52,8 @@ make
 0 - без логов \
 1 - логирование сообщений только от клиентов \
 2 - логирование сообщений только от базы данных \
-3 - логирование сообщений и от клиентов, и от базы данных
+3 - логирование сообщений и от клиентов, и от базы данных \
+4 - логирование команд из сообщений от клиентов (например из строки сообщения `Q [ 0  0  0  12 ] SELECT; [ 0 ]` будет извлечена в логи только команда `SELECT;`)
 
 2. `output`
 
@@ -64,43 +65,50 @@ make
 # 1 only clients
 # 2 only data base (Postgres)
 # 3 clients and data base (Postgres)
-# default: 3
-deep logs: 3
+# 4 only clients commands
+# default: 4
+deep logs: 4
 
 # 0 to file with path ./logs/logs_date_time
 # 1 to stdout (to the standard output)
 # default: 0
 output: 0
 ```
-В конфигурационном файле не должно быть лишних строк (кроме комментариев и пустых строк) и символов.
+В конфигурационном файле допускаются комментарии и пустые строки.
 Строки, которые начинаются с решетки `#` являются комментариями.
-Также допускаются пустые строки.
+Посторонние символы и несуществующие параметры делают конфигурационный файл недействительнымю
 
-Параметр конфигурации состоит из именованного поля `deep logs`, двоеточия `:`, обязательного одного пробела ` ` и числового значения параметра (например, `1`).
+Параметр конфигурации состоит из именованного поля (например, `deep logs`), двоеточия `:`, обязательного одного пробела ` ` и числового значения параметра (например, `1`).
 
 Структура логов:
 ```sh
-# [дата] [Время]    Отправитель       IP:port[IP:порт]  сокет[fd]    данные: [числовая часть] текстовая часть
-# [date] [time]     Client       from IP:port[IP:port]  fd[fd]       datas:  [numerical part] text part
+# [дата] [Время]    Отправитель       IP:port[IP:порт]  сокет[fd]    данные: byte1 [длина сообщения в байтах] строка
+# [date] [time]     Client       from IP:port[IP:port]  fd[fd]       datas: byte1 [Length of message in bytes] string
 # or
-# [date] [time]     Postgres       to IP:port[IP:port]  fd[fd]       datas:  [numerical part] text part
+# [date] [time]     Postgres       to IP:port[IP:port]  fd[fd]       datas: byte1 [Length of message in bytes] string
 
 ```
-Пример вывода логов в файл:
+Пример вывода логов с глубиной логирования `4` в файл :
 ```
-2023.04.20 15:31:06  Client         from IP:port[ 127.0.0.1:52752      ] fd[6]  datas:  [ 0  0  0  8  4  210  22 ] /
-2023.04.20 15:31:06  Postgres       to   IP:port[ 127.0.0.1:52752      ] fd[7]  datas: N
-2023.04.20 15:31:06  Client         from IP:port[ 127.0.0.1:52752      ] fd[6]  datas:  [ 0  0  0 ] P [ 0  3  0  0 ] user [ 0 ] postgres [ 0 ] database [ 0 ] mydb [ 0 ] application_name [ 0 ] psql [ 0 ] client_encoding [ 0 ] UTF8 [ 0  0 ] 
-2023.04.20 15:31:06  Postgres       to   IP:port[ 127.0.0.1:52752      ] fd[7]  datas: R [ 0  0  0  8  0  0  0  0 ] S [ 0  0  0  26 ] application_name [ 0 ] psql [ 0 ] S [ 0  0  0  25 ] client_encoding [ 0 ] UTF8 [ 0 ] S [ 0  0  0  23 ] DateStyle [ 0 ] ISO, DMY [ 0 ] S [ 0  0  0 ] &default_transaction_read_only [ 0 ] off [ 0 ] S [ 0  0  0  23 ] in_hot_standby [ 0 ] off [ 0 ] S [ 0  0  0  25 ] integer_datetimes [ 0 ] on [ 0 ] S [ 0  0  0  27 ] IntervalStyle [ 0 ] postgres [ 0 ] S [ 0  0  0  20 ] is_superuser [ 0 ] on [ 0 ] S [ 0  0  0  25 ] server_encoding [ 0 ] UTF8 [ 0 ] S [ 0  0  0 ] 7server_version [ 0 ] 14.7 (Ubuntu 14.7-0ubuntu0.22.04.1) [ 0 ] S [ 0  0  0 ] #session_authorization [ 0 ] postgres [ 0 ] S [ 0  0  0 ] #standard_conforming_strings [ 0 ] on [ 0 ] S [ 0  0  0  27 ] TimeZone [ 0 ] Europe/Moscow [ 0 ] K [ 0  0  0  12  0  2  237  178 ] V]# [ 152 ] Z [ 0  0  0  5 ] I
-2023.04.20 15:31:17  Client         from IP:port[ 127.0.0.1:52752      ] fd[6]  datas: Q [ 0  0  0  12 ] SELECT; [ 0 ] 
-2023.04.20 15:31:17  Postgres       to   IP:port[ 127.0.0.1:52752      ] fd[7]  datas: T [ 0  0  0  6  0  0 ] D [ 0  0  0  6  0  0 ] C [ 0  0  0  13 ] SELECT 1 [ 0 ] Z [ 0  0  0  5 ] I
-2023.04.20 15:31:18  Client         from IP:port[ 127.0.0.1:52752      ] fd[6]  datas: Q [ 0  0  0  6 ] ; [ 0 ] 
-2023.04.20 15:31:18  Postgres       to   IP:port[ 127.0.0.1:52752      ] fd[7]  datas: I [ 0  0  0  4 ] Z [ 0  0  0  5 ] I
-2023.04.20 15:31:19  Client         from IP:port[ 127.0.0.1:52752      ] fd[6]  datas: X [ 0  0  0  4 ] 
-2023.04.20 15:31:19  Client         from IP:port[ 127.0.0.1:52752      ] fd[6]  peer closed connection
+2023.04.23 15:08:15  Client         from IP:port[ 127.0.0.1:35938      ] fd[6]  datas: CREATE FUNCTION sum2(integer, integer) RETURNS integer    AS 'select $1 + $2;'    LANGUAGE SQL    IMMUTABLE    RETURNS NULL ON NULL INPUT; 
+2023.04.23 15:08:21  Client         from IP:port[ 127.0.0.1:35938      ] fd[6]  datas: select sum2(10,2);
 
 ```
-Пример вывода логов в стандартный вывод stdout:
+Пример вывода логов с глубиной логирования `3` в `файл`:
+```
+2023.04.23 15:05:27  Client         from IP:port[ 127.0.0.1:56042      ] fd[6]  datas:  [ 0  0  0  8 ]  [ 4  210  22  47 ] 
+2023.04.23 15:05:27  Postgres       to   IP:port[ 127.0.0.1:56042      ] fd[7]  datas: N
+2023.04.23 15:05:27  Client         from IP:port[ 127.0.0.1:56042      ] fd[6]  datas:  [ 0  0  0  80 ]  [ 0  3  0  0 ] user [ 0 ] postgres [ 0 ] database [ 0 ] mydb [ 0 ] application_name [ 0 ] psql [ 0 ] client_encoding [ 0 ] UTF8 [ 0  0 ] 
+2023.04.23 15:05:27  Postgres       to   IP:port[ 127.0.0.1:56042      ] fd[7]  datas: R [ 0  0  0  8 ]  [ 0  0  0  0 ] S [ 0  0  0  26 ] application_name [ 0 ] psql [ 0 ] S [ 0  0  0  25 ] client_encoding [ 0 ] UTF8 [ 0 ] S [ 0  0  0  23 ] DateStyle [ 0 ] ISO, DMY [ 0 ] S [ 0  0  0 ] &default_transaction_read_only [ 0 ] off [ 0 ] S [ 0  0  0  23 ] in_hot_standby [ 0 ] off [ 0 ] S [ 0  0  0  25 ] integer_datetimes [ 0 ] on [ 0 ] S [ 0  0  0  27 ] IntervalStyle [ 0 ] postgres [ 0 ] S [ 0  0  0  20 ] is_superuser [ 0 ] on [ 0 ] S [ 0  0  0  25 ] server_encoding [ 0 ] UTF8 [ 0 ] S [ 0  0  0 ] 7server_version [ 0 ] 14.7 (Ubuntu 14.7-0ubuntu0.22.04.1) [ 0 ] S [ 0  0  0 ] #session_authorization [ 0 ] postgres [ 0 ] S [ 0  0  0 ] #standard_conforming_strings [ 0 ] on [ 0 ] S [ 0  0  0  27 ] TimeZone [ 0 ] Europe/Moscow [ 0 ] K [ 0  0  0  12  0  0 ] z [ 152  245 ] / [ 175  176 ] Z [ 0  0  0  5 ] I
+2023.04.23 15:06:00  Client         from IP:port[ 127.0.0.1:56042      ] fd[6]  datas: Q [ 0  0  0  146 ] CREATE FUNCTION sum(integer, integer) RETURNS integer [ 10 ]     AS 'select $1 + $2;' [ 10 ]     LANGUAGE SQL [ 10 ]     IMMUTABLE [ 10 ]     RETURNS NULL ON NULL INPUT; [ 0 ] 
+2023.04.23 15:06:00  Postgres       to   IP:port[ 127.0.0.1:56042      ] fd[7]  datas: C [ 0  0  0  20 ] CREATE FUNCTION [ 0 ] Z [ 0  0  0  5 ] I
+2023.04.23 15:06:09  Client         from IP:port[ 127.0.0.1:56042      ] fd[6]  datas: Q [ 0  0  0  22 ] select sum(10,2); [ 0 ] 
+2023.04.23 15:06:09  Postgres       to   IP:port[ 127.0.0.1:56042      ] fd[7]  datas: T [ 0  0  0  28 ]  [ 0  1 ] sum [ 0  0  0  0  0  0  0  0  0  0  23  0  4  255  255  255  255  0  0 ] D [ 0  0  0  12  0  1  0  0  0  2 ] 12C [ 0  0  0  13 ] SELECT 1 [ 0 ] Z [ 0  0  0  5 ] I
+2023.04.23 15:06:12  Client         from IP:port[ 127.0.0.1:56042      ] fd[6]  datas: X [ 0  0  0  4 ] 
+2023.04.23 15:06:12  Client         from IP:port[ 127.0.0.1:56042      ] fd[6]  peer closed connection
+
+```
+Пример вывода логов  с глубиной логирования `3` в стандартный вывод `stdout`:
 
 ![stdoutput_logs](./README/logs.png)
 

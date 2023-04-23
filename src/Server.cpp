@@ -147,6 +147,11 @@ Server::epollin(int i) {
     client->makeResponse(fd);
 }
 
+/* The function adds a new client to the clients vector. 
+*  Gets its file descriptor, the file descriptor for the 
+*  client to interact with the database.
+*  Adds received file descriptors to the epoll.
+*/
 void
 Server::addNewClient(int i_events) {
 
@@ -178,6 +183,8 @@ Server::addNewClient(int i_events) {
         epoll_ctl(_fd_epoll, EPOLL_CTL_DEL, fd_cli, NULL);
 }
 
+/*  Gets the file descriptor of the client.
+*/
 int    
 Server::fdClient(struct sockaddr_in &clientData) {
 
@@ -195,6 +202,9 @@ Server::fdClient(struct sockaddr_in &clientData) {
     return fd;
 }
 
+/* Gets the database file descriptor for the client 
+*  to interact with the database.
+*/
 int 
 Server::fdDatabase(void) {
 
@@ -241,6 +251,9 @@ Server::setConnectionDb(struct addrinfo *lst) {
     return fd;
 }
 
+/* The function creates a string with 
+*  the IP and port of the client from the struct sockaddr_in &clientData 
+*/
 std::string 
 Server::clientIpPort(struct sockaddr_in &clientData) {
     std::string str = inet_ntoa(clientData.sin_addr);
@@ -254,6 +267,9 @@ isClientFree(::Client *client) {
     return (client == NULL);
 }
 
+/* Adds a client to the client vector
+*  and to the _connector (Dictionary of pairs client fd and client)
+*/
 void
 Server::addClient(int fd_cli, int fd_db, ::Client *client) {
 
@@ -270,6 +286,8 @@ Server::addClient(int fd_cli, int fd_db, ::Client *client) {
     _connector[fd_cli] = _connector[fd_db] = client->getId();
 }
 
+/* Removes a client from the client vector
+*/
 void
 Server::rmClient(::Client *client) {
     _clients[client->getId()] = NULL;
@@ -331,6 +349,9 @@ Server::getClient(int i) {
 
 
 
+/* Sets the flag for exiting the main server loop to true,
+*  which causes the server to shut down. 
+*/
 static void
 sigint_handler(int) {
     std::cout << std::endl;
@@ -338,6 +359,7 @@ sigint_handler(int) {
     g_server.finish();
 }
 
+/* starts the main server loop with epoll */
 void
 Server::start(void) {
     int nb_fds;
@@ -357,7 +379,6 @@ Server::start(void) {
             } else {
                 ::std::cout << "INFO: Server: start: epoll events other" << ::std::endl;
             }
-            // EPOLLPRI 
             unlink(getClient(i));
         }
         if (wait_connection == nb_fds) {
@@ -370,6 +391,11 @@ Server::start(void) {
                 " fatal: Server: epoll_wait -1", 1);
 }
 
+/* The function removes the client from the client vector, 
+*  closes the client's file descriptors and removes them 
+*  from epoll , removes the pair of file descriptor and the 
+*  client being removed from the map.
+*/
 void
 Server::unlink(Client *cli) {
     if (cli == NULL)
@@ -397,6 +423,9 @@ Server::unlink(Client *cli) {
     rmClient(cli);
 }
 
+/* Sets the flag for exiting the main server loop to true,
+*  which causes the server to shut down. 
+*/
 void 
 Server::finish(void) {
     _working = false;

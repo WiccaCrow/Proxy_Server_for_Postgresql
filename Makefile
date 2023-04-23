@@ -32,7 +32,7 @@ DFLT_DIR     = default
 
 SRCS         =  main.cpp		Server.cpp		Client.cpp   \
                 utils.cpp		Request.cpp		Response.cpp \
-				config.cpp
+				config.cpp		ParserCli.cpp
 
 
 OBJS = $(addprefix $(OBJS_DIR)/, $(SRCS:.cpp=.o))

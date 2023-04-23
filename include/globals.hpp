@@ -13,10 +13,3 @@ extern int g_output;
 
 extern std::string g_color;
 extern std::string g_color_end;
-
-// #ifndef LF
-//     # define LF "\n"
-// #endif
-
-
-

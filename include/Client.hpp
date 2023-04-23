@@ -33,11 +33,11 @@ private:
     std::string _rem_cli;
     std::string _rem_db;
 
-    listReq     _requests_cli;
-    listReq     _requests_db;
+    listReq     _requests_cli;              // messages from clients
+    listReq     _requests_db;               // messages from data base
 
-    listRes     _responses_cli;
-    listRes     _responses_db;
+    listRes     _responses_cli;             // messages to clients
+    listRes     _responses_db;              // messages to data base
 
     std::string _cli_ip_port;
 
@@ -50,10 +50,11 @@ private:
     void    fillInResponse(Response *res, Request *req);
     int     write(int fd, Response *res);
 
-    void    logs(int fd, std::string str, int isClosed);
+    void    logs(int fd, std::string str, bool isClosed);
     bool    checkDeepLogs(int fd);
-    void    logsHostPortFd(int fd, int isClosed);
-
+    void    logHostPortFd(int fd, bool isClosed);
+    bool    logOnlyCliCommands(int fd, std::string &str, bool isClosed);
+    void    logBlind(int fd, std::string &str, bool isClosed);
 
     template<class TList>
     void    clearList(TList *clean) {

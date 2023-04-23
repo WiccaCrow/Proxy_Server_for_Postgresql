@@ -13,6 +13,12 @@ int     main(int ac, char **av) {
     return 0;
 }
 
+/* int     checkArgumens(int ac, char **av);
+* Сhecks the validity of the arguments passed to the program.
+* (hX.X.X.X pX 
+*   X.X.X.X is IPv4 
+*         X ports number)
+*/
 int     checkArgumens(int ac, char **av) {
 
     if (ac == 1) {
@@ -36,12 +42,12 @@ int     checkArgumens(int ac, char **av) {
         return 1;
     }
 
-    if (check_host_or_port(av[1]))
+    if (check_host_and_port(av[1]))
         return 1;
 
     int check_av2 = 0;
     if (ac > 2) {
-        check_av2 = check_host_or_port(av[2]);
+        check_av2 = check_host_and_port(av[2]);
         if (!check_av2) {
             std::cout << "Settings: " << std::endl
                     << "    host: " << g_db_host << std::endl
@@ -51,13 +57,21 @@ int     checkArgumens(int ac, char **av) {
     return check_av2;
 }
 
-int     check_host_or_port(char* h_or_p) {
+/* int     check_host_and_port(char* h_or_p);
+*  The function checks by the first character 
+*  whether the host or port is given in the arguments. 
+*  Next, the function for checking the host or port is called, respectively.
+*/
+int     check_host_and_port(char* h_or_p) {
     if (h_or_p[0] == 'h') {
         return (checkHost(h_or_p));
     }
     return (checkPort(h_or_p + 1));
 }
 
+/* int     checkPort(std::string port);
+* The function checks the port format for validity.
+*/
 int     checkPort(std::string port) {
     if (!port.empty() 
         && port.length() < 6
@@ -71,6 +85,9 @@ int     checkPort(std::string port) {
     return 1;
 }
 
+/* int     checkHost(std::string port);
+* The function checks the host format for validity.
+*/
 int     checkHost(std::string host) {
 
     if (host.length() > 16 || host.length() < 8 ||
@@ -106,6 +123,9 @@ int     checkHost(std::string host) {
     return 0;
 }
 
+/* std::string  nameLogFile(void);
+* Create log file name.
+*/
 std::string
         nameLogFile(void) {
     std::time_t t = std::time(nullptr);
